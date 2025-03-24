@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# Логи
+*.log
+
+# Выходные файлы
+output/
+*.xlsx
+
+# IDE
+.vscode/
+.idea/
+
+# Временные файлы
+*.tmp
+*.bak
+*.swp 

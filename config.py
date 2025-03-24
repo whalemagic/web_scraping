@@ -1,19 +1,41 @@
+import os
+from pathlib import Path
+
 # Настройки скрапера
 SCRAPER_CONFIG = {
-    'base_url': "https://www.penguinmagic.com/p",
-    'start_page': 10001,
-    'end_page': 11000,
-    'min_delay': 1.0,  # минимальная задержка между запросами
-    'max_delay': 2.5,  # максимальная задержка между запросами
-    'output_file': "penguins10k-11k.xlsx",
+    'base_url': 'https://www.penguinmagic.com',  # Базовый URL для скрапинга
+    'start_page': 15001,  # Начальная страница
+    'end_page': 15100,  # Конечная страница
+    
+    # Настройки запросов
     'headers': {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     },
-    'max_retries': 3,  # максимальное количество попыток при ошибке
-    'timeout': 30,  # таймаут запроса в секундах
-    'batch_size': 50,  # количество запросов между паузами
-    'batch_delay': 60  # пауза между батчами в секундах
+    'timeout': 30,  # Таймаут запросов в секундах
+    'max_retries': 3,  # Максимальное количество повторных попыток
+    
+    # Настройки задержек
+    'min_delay': 2,  # Минимальная задержка между запросами в секундах
+    'max_delay': 5,  # Максимальная задержка между запросами в секундах
+    'batch_size': 5,  # Размер батча запросов
+    'batch_delay': 60,  # Задержка между батчами в секундах
+    
+    # Настройки сохранения
+    'save_interval': 20,  # Интервал сохранения (количество продуктов)
+    'excel_output': 'products.xlsx',  # Путь к файлу Excel
+    
+    # Настройки логирования
+    'log_file': 'scraper.log',  # Путь к файлу логов
+    'log_level': 'INFO',  # Уровень логирования
 }
+
+# Создаем директорию для выходных файлов, если она не существует
+output_dir = Path('output')
+output_dir.mkdir(exist_ok=True)
+
+# Обновляем пути с учетом директории output
+SCRAPER_CONFIG['excel_output'] = str(output_dir / SCRAPER_CONFIG['excel_output'])
+SCRAPER_CONFIG['log_file'] = str(output_dir / SCRAPER_CONFIG['log_file'])
 
 # Категории для классификации
 CATEGORIES = {
