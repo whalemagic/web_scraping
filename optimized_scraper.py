@@ -8,106 +8,115 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 from config import SCRAPER_CONFIG, CATEGORIES, AUTHOR_PATTERNS
+from database import save_to_database
+import random
+import sys
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(f'scraper_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
-        logging.StreamHandler()
+        logging.FileHandler('scraper.log'),
+        logging.StreamHandler(sys.stdout)
     ]
 )
 
-class Scraper:
-    def __init__(self, config: Dict = SCRAPER_CONFIG):
-        self.config = config
+class PenguinMagicScraper:
+    def __init__(self):
+        self.config = SCRAPER_CONFIG
         self.session = requests.Session()
-        self.session.headers.update(config['headers'])
-        
-    def clean_text(self, text: Optional[str]) -> str:
-        if not text:
-            return 'Нет данных'
-        text = re.sub(r'<[^>]+>', '', text)
-        text = re.sub(r'[^\w\s.,!?-]', ' ', text)
-        text = re.sub(r'([.,!?])\1+', r'\1', text)
-        return ' '.join(text.split())
+        self.session.headers.update(self.config['headers'])
+        self.products = []
+        self.current_batch = 0
 
-    def extract_author(self, product_name: str) -> Optional[str]:
-        if not product_name:
-            return None
-            
-        for pattern in AUTHOR_PATTERNS:
-            if match := re.search(pattern, product_name, re.IGNORECASE):
-                author = match.group(1).strip()
-                author = re.sub(r'\s+', ' ', author)
-                author = re.sub(r'^[|-\s]+|[|-\s]+$', '', author)
-                return author if author else None
-        
-        return None
+    def random_delay(self):
+        """Случайная задержка между запросами"""
+        delay = random.uniform(self.config['min_delay'], self.config['max_delay'])
+        time.sleep(delay)
 
-    def extract_categories(self, description: str) -> List[str]:
-        description_lower = description.lower()
-        return [cat for cat, keywords in CATEGORIES.items() 
-                if any(keyword.lower() in description_lower for keyword in keywords)] or ['uncategorized']
+    def batch_delay(self):
+        """Пауза между батчами запросов"""
+        if self.current_batch >= self.config['batch_size']:
+            logging.info(f"Достигнут лимит батча ({self.config['batch_size']} запросов). Пауза {self.config['batch_delay']} секунд.")
+            time.sleep(self.config['batch_delay'])
+            self.current_batch = 0
 
-    def get_product_details(self, product_url: str, page: int) -> Optional[Dict]:
+    def make_request(self, url: str, retry_count: int = 0) -> Optional[requests.Response]:
+        """Выполнение запроса с обработкой ошибок и повторными попытками"""
         try:
-            response = self.session.get(product_url)
+            response = self.session.get(url, timeout=self.config['timeout'])
             response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            product_name = self.clean_text(soup.find('div', id='product_name').find('h1').text if soup.find('div', id='product_name') else None)
-            description = self.clean_text(soup.find('div', id='product_description').text if soup.find('div', id='product_description') else None)
-            price = self.clean_text(soup.find('td', class_='ourprice').text if soup.find('td', class_='ourprice') else None)
-            author_name = self.extract_author(product_name)
+            return response
+        except requests.RequestException as e:
+            if retry_count < self.config['max_retries']:
+                logging.warning(f"Ошибка запроса: {e}. Повторная попытка {retry_count + 1}/{self.config['max_retries']}")
+                time.sleep(random.uniform(2, 5))  # Увеличенная задержка при ошибке
+                return self.make_request(url, retry_count + 1)
+            else:
+                logging.error(f"Превышено максимальное количество попыток для URL: {url}")
+                return None
 
-            return {
-                'product_name': product_name,
-                'author_name': author_name,
-                'price': price,
-                'product_url': product_url,
-                'page': page,
-                'product_description': description,
-                'categories': self.extract_categories(description)
-            }
+    def scrape_page(self, page_number: int) -> List[Dict]:
+        """Скрапинг одной страницы"""
+        url = f"{self.config['base_url']}/{page_number}"
+        logging.info(f"Обработка страницы {page_number}")
         
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Ошибка при запросе {product_url}: {e}")
-            return None
-        except Exception as e:
-            logging.error(f"Неожиданная ошибка при обработке {product_url}: {e}")
-            return None
+        response = self.make_request(url)
+        if not response:
+            return []
 
-    def get_all_product_details(self) -> List[Dict]:
-        product_details_list = []
-        start_page, end_page = self.config['start_page'], self.config['end_page']
+        soup = BeautifulSoup(response.text, 'html.parser')
+        products = []
         
-        with tqdm(total=end_page - start_page + 1, desc="Загрузка страниц", unit="стр") as pbar:
-            for page in range(start_page, end_page + 1):
-                if details := self.get_product_details(f"{self.config['base_url']}/{page}", page):
-                    product_details_list.append(details)
-                pbar.update(1)
-                time.sleep(self.config['delay'])
-        return product_details_list
+        # Ваш существующий код парсинга страницы
+        # ...
 
-    def save_results(self, data: List[Dict]) -> None:
-        try:
-            df = pd.DataFrame(data)
-            df = df.query('product_name!="Нет данных"')
-            df.to_excel(self.config['output_file'], index=False)
-            logging.info(f"Результаты сохранены в {self.config['output_file']}")
-        except Exception as e:
-            logging.error(f"Ошибка при сохранении результатов: {e}")
+        self.current_batch += 1
+        self.batch_delay()
+        return products
+
+    def run(self):
+        """Запуск скрапера"""
+        start_time = datetime.now()
+        logging.info(f"Начало скрапинга: {start_time}")
+
+        for page in range(self.config['start_page'], self.config['end_page'] + 1):
+            try:
+                products = self.scrape_page(page)
+                self.products.extend(products)
+                
+                # Сохранение промежуточных результатов каждые 100 страниц
+                if len(self.products) % 100 == 0:
+                    self.save_results()
+                    logging.info(f"Сохранено {len(self.products)} продуктов")
+                
+                self.random_delay()
+                
+            except Exception as e:
+                logging.error(f"Ошибка при обработке страницы {page}: {e}")
+                continue
+
+        self.save_results()
+        end_time = datetime.now()
+        duration = end_time - start_time
+        logging.info(f"Скрапинг завершен. Длительность: {duration}")
+
+    def save_results(self):
+        """Сохранение результатов в Excel"""
+        df = pd.DataFrame(self.products)
+        df.to_excel(self.config['output_file'], index=False)
+        logging.info(f"Результаты сохранены в {self.config['output_file']}")
 
 def main():
     try:
-        scraper = Scraper()
+        scraper = PenguinMagicScraper()
         logging.info("Начало работы скрапера")
         
-        product_details_list = scraper.get_all_product_details()
-        scraper.save_results(product_details_list)
+        scraper.run()
+        
+        # Сохранение в базу данных
+        save_to_database(scraper.products)
         
         logging.info("Работа скрапера завершена успешно")
     except Exception as e:

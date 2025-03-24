@@ -1,13 +1,18 @@
 # Настройки скрапера
 SCRAPER_CONFIG = {
     'base_url': "https://www.penguinmagic.com/p",
-    'start_page': 5001,
-    'end_page': 6000,
-    'delay': 1.5,  # задержка между запросами
-    'output_file': "penguins5k-6k.xlsx",
+    'start_page': 10001,
+    'end_page': 11000,
+    'min_delay': 1.0,  # минимальная задержка между запросами
+    'max_delay': 2.5,  # максимальная задержка между запросами
+    'output_file': "penguins10k-11k.xlsx",
     'headers': {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    },
+    'max_retries': 3,  # максимальное количество попыток при ошибке
+    'timeout': 30,  # таймаут запроса в секундах
+    'batch_size': 50,  # количество запросов между паузами
+    'batch_delay': 60  # пауза между батчами в секундах
 }
 
 # Категории для классификации
