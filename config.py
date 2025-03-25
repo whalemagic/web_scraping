@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
 
+# Получаем путь к корневой директории проекта
+PROJECT_ROOT = Path(__file__).parent
+
 # Настройки скрапера
 SCRAPER_CONFIG = {
     'base_url': 'https://www.penguinmagic.com',  # Базовый URL для скрапинга
-    'start_page': 15001,  # Начальная страница
-    'end_page': 15003,  # Конечная страница
+    'start_page': 16001,  # Начальная страница
+    'end_page': 16010,  # Конечная страница
     
     # Настройки запросов
     'headers': {
@@ -17,18 +20,18 @@ SCRAPER_CONFIG = {
     # Настройки задержек
     'min_delay': 2,  # Минимальная задержка между запросами в секундах
     'max_delay': 5,  # Максимальная задержка между запросами в секундах
-    'batch_size': 5,  # Размер батча запросов
-    'batch_delay': 60,  # Задержка между батчами в секундах
+    'batch_size': 50,  # Размер батча запросов
+    'batch_delay': 30,  # Задержка между батчами в секундах
     
     # Настройки сохранения
     'save_interval': 10,  # Интервал сохранения (количество продуктов)
     'delay': 1.5,  # задержка между запросами в секундах
-    'data_dir': 'data',  # директория для данных
-    'excel_output': 'data/products.xlsx',  # путь к файлу Excel
+    'data_dir': str(PROJECT_ROOT / 'data'),  # директория для данных
+    'excel_output': str(PROJECT_ROOT / 'data' / 'products.xlsx'),  # путь к файлу Excel
     
     # Настройки логирования
-    'log_dir': 'logs',  # директория для логов
-    'log_file': 'logs/scraper.log',  # путь к файлу логов
+    'log_dir': str(PROJECT_ROOT / 'logs'),  # директория для логов
+    'log_file': str(PROJECT_ROOT / 'logs' / 'scraper.log'),  # путь к файлу логов
 }
 
 # Создаем необходимые директории

@@ -71,11 +71,13 @@ class PenguinMagicScraper:
                 logger.error(f"Превышено максимальное количество попыток для URL: {url}")
                 return None
 
-    def extract_product_info(self, product_element) -> Optional[Dict]:
+    def extract_product_info(self, product_element, page_number: int) -> Optional[Dict]:
         """Извлечение информации о продукте из HTML элемента"""
         try:
             # Название продукта и автор
-            title_element = product_element.find('title')
+            title_element = product_element.find('h1')
+            if not title_element:
+                title_element = product_element.find('title')
             if not title_element:
                 logger.warning("Не найден заголовок продукта")
                 return None
@@ -88,70 +90,90 @@ class PenguinMagicScraper:
             if author_match:
                 author = author_match.group(1).strip()
             
-            # URL продукта - берем из текущего URL
+            # URL продукта
             product_url = self.current_url
             
-            # Изображение
-            meta_image = product_element.find('meta', {'property': 'og:image'})
-            image_url = None
-            if meta_image:
-                image_url = meta_image.get('content')
-            
-            # Цена - ищем в мета-тегах и в тексте страницы
+            # Цена
             price = None
-            # Сначала ищем в мета-тегах
-            meta_price = product_element.find('meta', {'property': 'product:price:amount'})
-            if meta_price:
+            price_tag = product_element.find('td', class_='ourprice')
+            if price_tag:
                 try:
-                    price = float(meta_price.get('content'))
-                except (ValueError, TypeError):
-                    pass
-            
-            # Если не нашли в мета-тегах, ищем в заголовке
-            if not price:
-                price_match = re.search(r'\$(\d+\.?\d*)', product_name)
-                if price_match:
-                    try:
+                    price_text = price_tag.text.strip()
+                    price_match = re.search(r'\$?(\d+\.?\d*)', price_text)
+                    if price_match:
                         price = float(price_match.group(1))
-                    except ValueError:
-                        pass
+                except (ValueError, AttributeError):
+                    logger.warning(f"Не удалось преобразовать цену из текста: {price_text}")
             
-            # Если все еще не нашли, устанавливаем значение по умолчанию
-            if not price:
-                price = 9.95  # Большинство продуктов на сайте стоят $9.95
+            # Рейтинг и количество отзывов
+            rating = None
+            reviews_count = 0
+            
+            # Ищем количество отзывов в тексте
+            reviews_text = product_element.find(text=re.compile(r'\(\s*\d+\s*customer reviews?\s*\)'))
+            if reviews_text:
+                reviews_match = re.search(r'\(\s*(\d+)\s*customer reviews?\s*\)', reviews_text)
+                if reviews_match:
+                    reviews_count = int(reviews_match.group(1))
             
             # Описание
             description_meta = product_element.find('meta', {'property': 'og:description'})
             description = description_meta.get('content').strip() if description_meta else None
             
-            # Категория
+            # Если описание не найдено в мета-тегах, ищем в тексте
+            if not description:
+                description_element = product_element.find('div', class_='product-description')
+                if description_element:
+                    description = description_element.text.strip()
+            
+            # Основная категория и подкатегории
             category = None
+            subcategory = None
             keywords_meta = product_element.find('meta', {'name': 'keywords'})
             if keywords_meta:
-                keywords = keywords_meta.get('content', '').split(',')
+                keywords = [k.strip() for k in keywords_meta.get('content', '').split(',')]
                 if keywords:
-                    category = keywords[0].strip()
+                    category = keywords[0].strip().lower()
+                    # Определяем подкатегорию на основе ключевых слов в названии и описании
+                    subcategories = {
+                        'mentalism': ['mentalism', 'mind reading', 'prediction'],
+                        'cards': ['card', 'deck', 'playing cards'],
+                        'coins': ['coin', 'money magic'],
+                        'close-up': ['close-up', 'close up', 'closeup'],
+                        'stage': ['stage magic', 'illusion'],
+                        'downloads': ['instant download', 'digital'],
+                        'accessories': ['accessory', 'gimmick', 'prop']
+                    }
+                    
+                    text_to_check = f"{product_name} {description or ''}"
+                    for sub, keywords in subcategories.items():
+                        if any(keyword.lower() in text_to_check.lower() for keyword in keywords):
+                            subcategory = sub
+                            break
 
             product_info = {
                 'name': product_name,
                 'author': author,
                 'price': price,
                 'url': product_url,
-                'image_url': image_url,
                 'description': description,
                 'category': category,
+                'subcategory': subcategory,
+                'rating': rating,
+                'reviews_count': reviews_count,
+                'page': page_number,
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             }
 
-            logger.info(f"Извлечена информация о продукте: {product_name} (${price})")
+            logger.info(f"Извлечена информация о продукте: {product_name} (${price if price else 'N/A'}) - Отзывов: {reviews_count}")
             return product_info
 
         except Exception as e:
             logger.error(f"Ошибка при извлечении информации о продукте: {e}")
             return None
 
-    def get_product_details(self, product_url: str) -> Optional[Dict]:
+    def get_product_details(self, product_url: str, page_number: int) -> Optional[Dict]:
         """Получение детальной информации о продукте"""
         try:
             response = self.make_request(product_url)
@@ -166,7 +188,7 @@ class PenguinMagicScraper:
                 logger.warning(f"Не найден контейнер продукта на странице {product_url}")
                 return None
                 
-            return self.extract_product_info(product_container)
+            return self.extract_product_info(product_container, page_number)
 
         except Exception as e:
             logger.error(f"Ошибка при получении деталей продукта {product_url}: {e}")
@@ -191,7 +213,7 @@ class PenguinMagicScraper:
             return None
             
         # Извлекаем информацию о продукте
-        product_info = self.extract_product_info(head)
+        product_info = self.extract_product_info(head, page_number)
         if product_info:
             logger.info(f"Получена информация о продукте со страницы {page_number}")
             return product_info
@@ -209,8 +231,14 @@ class PenguinMagicScraper:
             df = pd.DataFrame(self.products)
             
             # Сохраняем с указанием всех столбцов
-            columns = ['name', 'author', 'price', 'url', 'image_url', 'description', 'category', 'created_at', 'updated_at']
+            columns = ['name', 'author', 'price', 'url', 'description', 'category', 'subcategory', 'page', 'created_at', 'updated_at']
             df = df.reindex(columns=columns)
+            
+            # Проверяем существование файла
+            if os.path.exists(filename):
+                # Если файл существует, добавляем новые данные
+                existing_df = pd.read_excel(filename)
+                df = pd.concat([existing_df, df], ignore_index=True)
             
             # Сохраняем файл
             df.to_excel(filename, index=False)
@@ -248,33 +276,39 @@ class PenguinMagicScraper:
                     if len(self.products) % self.config['save_interval'] == 0:
                         self.save_to_excel(self.config['excel_output'])
                         self.save_to_database()
-                        logger.info(f"Сохранено {len(self.products)} продуктов")
-                    
+                        
+                    # Задержка между запросами
                     self.random_delay()
+                    self.current_batch += 1
+                    self.batch_delay()
                     
                 except Exception as e:
                     logger.error(f"Ошибка при обработке страницы {page}: {e}")
                     continue
 
-            # Финальное сохранение
-            self.save_to_excel(self.config['excel_output'])
-            self.save_to_database()
+            # Сохраняем оставшиеся результаты
+            if self.products:
+                self.save_to_excel(self.config['excel_output'])
+                self.save_to_database()
 
+        except KeyboardInterrupt:
+            logger.info("Скрапинг прерван пользователем")
+            # Сохраняем собранные данные перед выходом
+            if self.products:
+                self.save_to_excel(self.config['excel_output'])
+                self.save_to_database()
         except Exception as e:
-            logger.error(f"Критическая ошибка при работе скрапера: {e}")
+            logger.error(f"Критическая ошибка: {e}")
         finally:
             end_time = datetime.now()
             duration = end_time - start_time
-            logger.info(f"Скрапинг завершен. Длительность: {duration}")
+            logger.info(f"Завершение скрапинга: {end_time}")
+            logger.info(f"Длительность: {duration}")
+            logger.info(f"Собрано продуктов: {len(self.products)}")
 
 def main():
-    try:
-        scraper = PenguinMagicScraper()
-        logger.info("Начало работы скрапера")
-        scraper.run()
-        logger.info("Работа скрапера завершена успешно")
-    except Exception as e:
-        logger.error(f"Критическая ошибка: {e}")
+    scraper = PenguinMagicScraper()
+    scraper.run()
 
 if __name__ == "__main__":
     main() 

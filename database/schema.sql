@@ -7,13 +7,20 @@ CREATE TABLE IF NOT EXISTS products (
     url VARCHAR(255),
     image_url TEXT,
     description TEXT,
-    categories TEXT[],
+    category VARCHAR(100),
+    subcategory VARCHAR(100),
+    rating DECIMAL(3, 2),
+    reviews_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Создаем индекс для ускорения поиска по названию
+-- Создаем индексы для ускорения поиска
 CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_products_subcategory ON products(subcategory);
+CREATE INDEX IF NOT EXISTS idx_products_rating ON products(rating);
+CREATE INDEX IF NOT EXISTS idx_products_reviews_count ON products(reviews_count);
 
 -- Создаем функцию для автоматического обновления updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -7,4 +7,5 @@ psycopg2==2.9.9
 python-dotenv==1.0.1
 SQLAlchemy==2.0.27
 urllib3==2.2.1
-logging==0.4.9.6 
+logging==0.4.9.6
+tabulate==0.9.0 
