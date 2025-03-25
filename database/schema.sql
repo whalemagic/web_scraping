@@ -1,12 +1,13 @@
--- Создаем таблицу для хранения продуктов
+-- Создание таблицы products со всеми необходимыми полями
 CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    author VARCHAR(255),
     price DECIMAL(10, 2),
-    url TEXT,
+    url VARCHAR(255),
     image_url TEXT,
     description TEXT,
-    category VARCHAR(100),
+    categories TEXT[],
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

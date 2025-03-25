@@ -249,13 +249,53 @@ class DatabaseManager:
             ORDER BY created_at DESC
             LIMIT %s OFFSET %s
         """
-        values.extend([limit, offset])
         
         try:
-            self.cur.execute(query, values)
+            self.cur.execute(query, values + [limit, offset])
             products = self.cur.fetchall()
             return [dict(p) for p in products]
             
         except Exception as e:
             logger.error(f"Ошибка при поиске продуктов: {e}")
-            raise 
+            raise
+            
+    def insert_product(self, product_data: Dict[str, Any]) -> int:
+        """
+        Алиас для метода add_product для обратной совместимости.
+        
+        Args:
+            product_data (dict): Данные продукта
+            
+        Returns:
+            int: ID добавленного продукта
+        """
+        return self.add_product(product_data)
+
+    def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False):
+        """
+        Выполняет SQL запрос и возвращает результат.
+        
+        Args:
+            query (str): SQL запрос
+            params (tuple, optional): Параметры запроса
+            fetch_one (bool): Вернуть только одну запись
+            
+        Returns:
+            list/dict/None: Результат запроса
+        """
+        try:
+            self.connect()
+            self.cur.execute(query, params)
+            
+            if fetch_one:
+                result = self.cur.fetchone()
+            else:
+                result = self.cur.fetchall()
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Ошибка при выполнении запроса: {e}")
+            raise
+        finally:
+            self.disconnect() 

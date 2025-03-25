@@ -5,11 +5,11 @@ from pathlib import Path
 SCRAPER_CONFIG = {
     'base_url': 'https://www.penguinmagic.com',  # Базовый URL для скрапинга
     'start_page': 15001,  # Начальная страница
-    'end_page': 15100,  # Конечная страница
+    'end_page': 15003,  # Конечная страница
     
     # Настройки запросов
     'headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     },
     'timeout': 30,  # Таймаут запросов в секундах
     'max_retries': 3,  # Максимальное количество повторных попыток
@@ -21,21 +21,19 @@ SCRAPER_CONFIG = {
     'batch_delay': 60,  # Задержка между батчами в секундах
     
     # Настройки сохранения
-    'save_interval': 20,  # Интервал сохранения (количество продуктов)
-    'excel_output': 'products.xlsx',  # Путь к файлу Excel
+    'save_interval': 10,  # Интервал сохранения (количество продуктов)
+    'delay': 1.5,  # задержка между запросами в секундах
+    'data_dir': 'data',  # директория для данных
+    'excel_output': 'data/products.xlsx',  # путь к файлу Excel
     
     # Настройки логирования
-    'log_file': 'scraper.log',  # Путь к файлу логов
-    'log_level': 'INFO',  # Уровень логирования
+    'log_dir': 'logs',  # директория для логов
+    'log_file': 'logs/scraper.log',  # путь к файлу логов
 }
 
-# Создаем директорию для выходных файлов, если она не существует
-output_dir = Path('output')
-output_dir.mkdir(exist_ok=True)
-
-# Обновляем пути с учетом директории output
-SCRAPER_CONFIG['excel_output'] = str(output_dir / SCRAPER_CONFIG['excel_output'])
-SCRAPER_CONFIG['log_file'] = str(output_dir / SCRAPER_CONFIG['log_file'])
+# Создаем необходимые директории
+for dir_path in [SCRAPER_CONFIG['data_dir'], SCRAPER_CONFIG['log_dir']]:
+    os.makedirs(dir_path, exist_ok=True)
 
 # Категории для классификации
 CATEGORIES = {
