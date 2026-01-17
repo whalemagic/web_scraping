@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 import re
 from urllib.parse import urlparse
+import json
 
 # Настройка логирования
 logging.basicConfig(
@@ -313,21 +314,28 @@ class DatabaseManager:
             if not self.conn or self.conn.closed:
                 self.connect()
 
+            # Поддерживаем как 'tags', так и 'categories' для обратной совместимости
+            tags = product.get('tags') or product.get('categories', [])
+            discounted_price = product.get('discounted_price')
+            reviews = product.get('reviews', [])
+            
             self.cur.execute("""
                 INSERT INTO products (
-                    name, author, price, url, image_url, 
-                    description, categories, created_at, updated_at
+                    name, author, price, discounted_price, url, image_url, 
+                    description, tags, reviews, created_at, updated_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """, (
                 product['name'],
-                product['author'],
+                product.get('author'),
                 product['price'],
+                discounted_price,
                 product['url'],
-                product['image_url'],
-                product['description'],
-                product['categories'],
+                product.get('image_url'),
+                product.get('description'),
+                tags,  # Используем tags вместо categories
+                json.dumps(reviews) if reviews else None,  # Сохраняем reviews как JSON
                 datetime.now(),
                 datetime.now()
             ))

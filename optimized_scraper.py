@@ -112,22 +112,48 @@ class PenguinMagicScraper:
             if author_match:
                 author = author_match.group(1).strip()
             
-            # Цена - ищем во всех возможных местах
-            price = None
+            # Цена без скидки (List price) и цена со скидкой (Price)
+            price = None  # Цена без скидки (List price)
+            discounted_price = None  # Цена со скидкой (Price)
             
-            # 1. Ищем в таблице с ценой
-            price_table = soup.find('table', class_='price-table')
+            # 1. Ищем в таблице product_price_details (приоритетный источник)
+            price_table = soup.find('table', class_='product_price_details')
             if price_table:
-                price_cell = price_table.find('td', class_='price')
-                if price_cell:
-                    try:
-                        price_text = price_cell.text.strip()
-                        price = float(price_text.replace('$', ''))
-                    except (ValueError, TypeError):
-                        pass
+                # Ищем все строки таблицы
+                rows = price_table.find_all('tr')
+                for row in rows:
+                    cells = row.find_all('td')
+                    if len(cells) >= 2:
+                        label = cells[0].get_text(strip=True).lower()
+                        value_cell = cells[1]
+                        
+                        # List price (цена без скидки) - обычно в <strike> теге
+                        if 'list price' in label:
+                            strike_tag = value_cell.find('strike')
+                            if strike_tag:
+                                try:
+                                    price_text = strike_tag.get_text(strip=True)
+                                    price = float(re.sub(r'[^\d.]', '', price_text))
+                                except (ValueError, TypeError):
+                                    pass
+                            # Если нет strike, берем из самой ячейки
+                            elif not price:
+                                try:
+                                    price_text = value_cell.get_text(strip=True)
+                                    price = float(re.sub(r'[^\d.]', '', price_text))
+                                except (ValueError, TypeError):
+                                    pass
+                        
+                        # Price (цена со скидкой) - в ячейке с классом ourprice
+                        elif 'price:' in label and value_cell.get('class') and 'ourprice' in value_cell.get('class'):
+                            try:
+                                price_text = value_cell.get_text(strip=True)
+                                discounted_price = float(re.sub(r'[^\d.]', '', price_text))
+                            except (ValueError, TypeError):
+                                pass
             
-            # 2. Ищем в JSON-данных
-            if not price:
+            # 2. Если не нашли в таблице, ищем в JSON-данных
+            if not price or not discounted_price:
                 script_tags = soup.find_all('script', {'type': 'application/ld+json'})
                 for script in script_tags:
                     try:
@@ -135,13 +161,31 @@ class PenguinMagicScraper:
                         if isinstance(json_data, dict):
                             if 'offers' in json_data:
                                 offers = json_data['offers']
-                                if isinstance(offers, dict) and 'price' in offers:
-                                    price = float(offers['price'])
-                                    break
+                                if isinstance(offers, dict):
+                                    # Цена со скидкой обычно в 'price'
+                                    if 'price' in offers and not discounted_price:
+                                        try:
+                                            discounted_price = float(offers['price'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    # Цена без скидки может быть в 'priceSpecification'
+                                    if 'priceSpecification' in offers:
+                                        price_spec = offers['priceSpecification']
+                                        if isinstance(price_spec, dict) and 'price' in price_spec and not price:
+                                            try:
+                                                price = float(price_spec['price'])
+                                            except (ValueError, TypeError):
+                                                pass
+                                break
                     except (json.JSONDecodeError, ValueError, TypeError, AttributeError):
                         continue
             
-            # 3. Ищем в мета-тегах
+            # 3. Если не нашли цену без скидки, используем цену со скидкой как основную
+            if not price and discounted_price:
+                price = discounted_price
+                discounted_price = None  # Если нет скидки, не сохраняем discounted_price
+            
+            # 4. Fallback: ищем цену в мета-тегах
             if not price:
                 meta_price = soup.find('meta', {'property': 'product:price:amount'})
                 if meta_price:
@@ -150,7 +194,7 @@ class PenguinMagicScraper:
                     except (ValueError, TypeError):
                         pass
             
-            # 4. Ищем в элементах с ценой
+            # 5. Fallback: ищем в элементах с ценой
             if not price:
                 price_selectors = [
                     ('span', {'class': 'price'}),
@@ -173,7 +217,7 @@ class PenguinMagicScraper:
                         except (ValueError, TypeError):
                             continue
             
-            # 5. Ищем цену в тексте страницы с помощью регулярных выражений
+            # 6. Fallback: ищем цену в тексте страницы с помощью регулярных выражений
             if not price:
                 price_patterns = [
                     r'\$(\d+\.?\d*)',
@@ -202,26 +246,76 @@ class PenguinMagicScraper:
             if meta_image:
                 image_url = meta_image.get('content')
             
-            # Описание
+            # Описание - ищем полное описание в div#product_description
             description = None
-            description_meta = soup.find('meta', {'property': 'og:description'})
-            if description_meta:
-                description = description_meta.get('content').strip()
+            description_div = soup.find('div', id='product_description')
+            if description_div:
+                # Ищем первый параграф в product_subsection
+                product_subsection = description_div.find('div', class_='product_subsection')
+                if product_subsection:
+                    description_p = product_subsection.find('p')
+                    if description_p:
+                        # Получаем весь текст, заменяем <br> на пробелы
+                        description = description_p.get_text(separator=' ', strip=True)
+                        # Очищаем от лишних пробелов
+                        description = ' '.join(description.split())
             
-            # Категории
-            categories = []
-            keywords_meta = soup.find('meta', {'name': 'keywords'})
-            if keywords_meta:
-                categories = [k.strip() for k in keywords_meta.get('content', '').split(',')]
+            # Если не нашли полное описание, используем meta как fallback
+            if not description:
+                description_meta = soup.find('meta', {'property': 'og:description'})
+                if description_meta:
+                    description = description_meta.get('content').strip()
+            
+            # Теги - ищем ссылки на /tricks/tagged/ рядом с продуктом
+            # Теги продукта находятся в div с float:left после product_addtocart
+            # Каждый тег в отдельном div с стилем: border:1px solid #999; background:#aaa
+            # НЕ в навигационном меню (browse_menu)
+            tags = []
+            
+            # Ищем область с тегами продукта - div с float:left после product_addtocart
+            # Теги находятся в div с float:left, который содержит div'ы с серыми блоками
+            product_addtocart = soup.find('div', class_='product_addtocart')
+            if product_addtocart:
+                # Ищем следующий div с float:left после product_addtocart
+                # Это контейнер с тегами продукта
+                tags_container = None
+                # Ищем все div с float:left после product_addtocart
+                for sibling in product_addtocart.find_all_next('div'):
+                    style = sibling.get('style', '')
+                    if 'float:left' in style:
+                        # Проверяем, что это не навигация
+                        if sibling.find_parent('div', id='browse_menu'):
+                            continue
+                        # Проверяем, что внутри есть div'ы с серыми блоками (теги)
+                        gray_blocks = sibling.find_all('div', style=lambda s: s and 'background:#aaa' in s and 'border:1px solid #999' in s)
+                        if gray_blocks:
+                            tags_container = sibling
+                            break
+                
+                if tags_container:
+                    # Извлекаем все ссылки на /tricks/tagged/ из этого контейнера
+                    tag_links = tags_container.find_all('a', href=lambda x: x and '/tricks/tagged/' in x)
+                    for link in tag_links:
+                        tag_text = link.get_text(strip=True)
+                        if tag_text:
+                            tags.append(tag_text)
+            
+            # Удаляем дубликаты, сохраняя порядок
+            tags = list(dict.fromkeys(tags))
+            
+            # Отзывы и оценки
+            reviews = self.extract_reviews(soup)
             
             product_info = {
                 'name': product_name,
                 'author': author,
-                'price': price,
+                'price': price,  # Цена без скидки (List price)
+                'discounted_price': discounted_price,  # Цена со скидкой (если есть)
                 'url': url,
                 'image_url': image_url,
                 'description': description,
-                'categories': categories,
+                'tags': tags,
+                'reviews': reviews,  # Отзывы и оценки
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
             }
@@ -232,6 +326,138 @@ class PenguinMagicScraper:
         except Exception as e:
             logger.error(f"Ошибка при извлечении информации о продукте {url}: {str(e)}")
             return None
+
+    def extract_reviews(self, soup) -> List[Dict]:
+        """Извлекает отзывы и оценки из HTML"""
+        reviews = []
+        
+        try:
+            # Ищем контейнер с отзывами
+            reviews_container = soup.find('div', id='sorted-reviews')
+            if not reviews_container:
+                logger.debug("Контейнер sorted-reviews не найден")
+                return reviews
+            
+            logger.debug(f"Найден контейнер sorted-reviews, ищем отзывы...")
+            
+            # Ищем все отзывы - каждый отзыв это div.product_review, который НЕ является review_header
+            # Структура: <div class="product_review"> содержит <div class="product_review review_header"> и <div class="review_body">
+            review_divs = reviews_container.find_all('div', class_='product_review')
+            logger.debug(f"Найдено {len(review_divs)} div с классом product_review")
+            
+            # Фильтруем только родительские отзывы (не review_header)
+            parent_reviews = []
+            for div in review_divs:
+                # Если это review_header, пропускаем (это дочерний элемент)
+                if 'review_header' in div.get('class', []):
+                    continue
+                # Проверяем, что внутри есть review_header или review_body
+                if div.find('div', class_='review_header') or div.find('div', class_='review_body'):
+                    parent_reviews.append(div)
+            
+            logger.debug(f"Найдено {len(parent_reviews)} родительских отзывов")
+            
+            for review_div in parent_reviews:
+                review_data = {}
+                
+                # Извлекаем оценку (rating) из изображения звезд в review_header
+                rating = None
+                review_header = review_div.find('div', class_='review_header')
+                if review_header:
+                    star_img = review_header.find('img', src=lambda x: x and 'stars.gif' in x)
+                    if star_img:
+                        src = star_img.get('src', '')
+                        # Извлекаем число из названия файла (например, "5stars.gif" -> 5)
+                        rating_match = re.search(r'(\d+)stars\.gif', src)
+                        if rating_match:
+                            rating = int(rating_match.group(1))
+                    
+                    # Извлекаем заголовок отзыва
+                    subject = None
+                    subject_span = review_header.find('span', class_='review_subject')
+                    if subject_span:
+                        subject = subject_span.get_text(strip=True)
+                    
+                    # Извлекаем дату
+                    date = None
+                    review_from = review_header.find('div', class_='review_from')
+                    if review_from:
+                        # Ищем текст после "on"
+                        text = review_from.get_text()
+                        date_match = re.search(r'on\s+([A-Za-z]+\s+\d+[a-z]{0,2},\s+\d{4})', text)
+                        if date_match:
+                            date = date_match.group(1)
+                        
+                        # Проверяем, является ли покупатель верифицированным
+                        verified_spans = review_from.find_all('span', class_='review_verified')
+                        verified_buyer = any('Verified buyer' in span.get_text() for span in verified_spans)
+                    else:
+                        verified_buyer = False
+                else:
+                    subject = None
+                    date = None
+                    verified_buyer = False
+                
+                # Извлекаем текст отзыва
+                review_text = None
+                review_body = review_div.find('div', class_='review_body')
+                if review_body:
+                    # Получаем весь текст, заменяем <br> на пробелы
+                    review_text = review_body.get_text(separator=' ', strip=True)
+                    # Очищаем от лишних пробелов
+                    review_text = ' '.join(review_text.split())
+                
+                # Извлекаем количество полезных голосов
+                helpful_count = None
+                helpful_total = None
+                # Ищем текст вида "X of Y magicians found this helpful"
+                helpful_text = review_div.get_text()
+                helpful_match = re.search(r'(\d+)\s+of\s+(\d+)\s+magicians\s+found\s+this\s+helpful', helpful_text)
+                if helpful_match:
+                    helpful_count = int(helpful_match.group(1))
+                    helpful_total = int(helpful_match.group(2))
+                
+                # Собираем данные отзыва
+                if rating or review_text:  # Добавляем отзыв, если есть хотя бы оценка или текст
+                    review_data = {
+                        'rating': rating,
+                        'subject': subject,
+                        'text': review_text,
+                        'date': date,
+                        'verified_buyer': verified_buyer,
+                        'helpful_count': helpful_count,
+                        'helpful_total': helpful_total
+                    }
+                    reviews.append(review_data)
+            
+            logger.debug(f"Извлечено {len(reviews)} отзывов")
+            
+            # Также извлекаем общую оценку из review_summary
+            overall_rating = None
+            review_count = None
+            review_summary = soup.find('div', id='review_summary')
+            if review_summary:
+                summary_link = review_summary.find('a', href='#reviews')
+                if summary_link:
+                    summary_text = summary_link.get_text(strip=True)
+                    # Ищем паттерн "4.8 stars / 6 reviews"
+                    rating_match = re.search(r'([\d.]+)\s+stars?\s*/\s*(\d+)\s+reviews?', summary_text)
+                    if rating_match:
+                        overall_rating = float(rating_match.group(1))
+                        review_count = int(rating_match.group(2))
+            
+            # Добавляем общую информацию в начало списка отзывов (если есть)
+            if overall_rating is not None:
+                reviews.insert(0, {
+                    'type': 'summary',
+                    'overall_rating': overall_rating,
+                    'total_reviews': review_count
+                })
+            
+        except Exception as e:
+            logger.error(f"Ошибка при извлечении отзывов: {str(e)}")
+        
+        return reviews
 
     def get_product_details(self, product_url: str) -> Optional[Dict]:
         """Получение детальной информации о продукте"""
@@ -294,9 +520,21 @@ class PenguinMagicScraper:
             # Преобразуем новые данные в DataFrame
             new_df = pd.DataFrame(self.products)
             
-            # Определяем столбцы
-            columns = ['name', 'author', 'price', 'url', 'image_url', 'description', 'categories']
+            # Определяем столбцы (включая новые поля)
+            columns = ['name', 'author', 'price', 'discounted_price', 'url', 'image_url', 'description', 'tags', 'reviews']
             new_df = new_df.reindex(columns=columns)
+            
+            # Обрабатываем reviews - преобразуем в строку JSON для Excel
+            if 'reviews' in new_df.columns:
+                new_df['reviews'] = new_df['reviews'].apply(
+                    lambda x: json.dumps(x, ensure_ascii=False) if x else None
+                )
+            
+            # Обрабатываем tags - преобразуем список в строку
+            if 'tags' in new_df.columns:
+                new_df['tags'] = new_df['tags'].apply(
+                    lambda x: ', '.join(x) if isinstance(x, list) else (x if x else None)
+                )
             
             # Очищаем текст от специальных символов
             def clean_text(text):
@@ -312,8 +550,8 @@ class PenguinMagicScraper:
                 text = ' '.join(text.split())
                 return text
             
-            # Применяем очистку к текстовым полям
-            for col in ['name', 'author', 'description']:
+            # Применяем очистку к текстовым полям (кроме reviews, которое уже в JSON)
+            for col in ['name', 'author', 'description', 'tags']:
                 if col in new_df.columns:
                     new_df[col] = new_df[col].apply(clean_text)
             
@@ -397,7 +635,7 @@ class PenguinMagicScraper:
                         
                         # Сохраняем промежуточные результаты
                         if len(self.products) % self.config['save_interval'] == 0:
-                            # self.save_to_excel(self.config['excel_output'])  # Временно отключено
+                            self.save_to_excel(self.config['excel_output'])
                             self.save_to_database(self.products[-self.config['batch_size']:])
                     
                     # Обновляем прогресс-бар
@@ -409,7 +647,7 @@ class PenguinMagicScraper:
             
             # Сохраняем финальные результаты
             if self.products:
-                # self.save_to_excel(self.config['excel_output'])  # Временно отключено
+                self.save_to_excel(self.config['excel_output'])
                 self.save_to_database(self.products[-self.config['batch_size']:])
                 
             logger.info(f"Скрапинг завершен. Обработано страниц: {total_pages}, собрано продуктов: {len(self.products)}")

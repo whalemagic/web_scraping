@@ -1,0 +1,22 @@
+{
+  "url": "https://www.penguinmagic.com/p/10016",
+  "page_id": "10016",
+  "status_code": 200,
+  "content_length": 100569,
+  "downloaded_at": "2026-01-17T19:48:16.050890",
+  "headers": {
+    "Date": "Sat, 17 Jan 2026 17:48:16 GMT",
+    "Content-Type": "text/html; charset=utf-8",
+    "Transfer-Encoding": "chunked",
+    "Connection": "keep-alive",
+    "Server": "cloudflare",
+    "vary": "Accept-Encoding",
+    "Cache-Control": "no-cache, must-revalidate",
+    "expires": "Mon, 26 Jul 1997 05:00:00 GMT",
+    "pragma": "no-cache",
+    "Set-Cookie": "PHPSESSID=4j9v1r3qqdgcs96a9q89gne0r7; expires=Fri, 08-May-2026 18:14:55 GMT; path=/; domain=.penguinmagic.com; HttpOnly",
+    "cf-cache-status": "DYNAMIC",
+    "Content-Encoding": "gzip",
+    "CF-RAY": "9bf7aeb6feb941b7-MRS"
+  }
+}

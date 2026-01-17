@@ -1,0 +1,41 @@
+{
+  "downloaded_at": "2026-01-17T19:48:17.588935",
+  "total_pages": 3,
+  "successful": 3,
+  "failed": 0,
+  "results": [
+    {
+      "success": true,
+      "html_file": "C:\\Users\\User\\My_projects\\Ai_magic_assistant\\web_scraping\\tests\\fixtures\\page_10016.html",
+      "metadata_file": "C:\\Users\\User\\My_projects\\Ai_magic_assistant\\web_scraping\\tests\\fixtures\\page_10016_metadata.json",
+      "content_length": 100569,
+      "page_info": {
+        "url": "https://www.penguinmagic.com/p/10016",
+        "id": "10016",
+        "name": "Baffling Blocks"
+      }
+    },
+    {
+      "success": true,
+      "html_file": "C:\\Users\\User\\My_projects\\Ai_magic_assistant\\web_scraping\\tests\\fixtures\\page_15234.html",
+      "metadata_file": "C:\\Users\\User\\My_projects\\Ai_magic_assistant\\web_scraping\\tests\\fixtures\\page_15234_metadata.json",
+      "content_length": 82629,
+      "page_info": {
+        "url": "https://www.penguinmagic.com/p/15234",
+        "id": "15234",
+        "name": "Blank Prediction"
+      }
+    },
+    {
+      "success": true,
+      "html_file": "C:\\Users\\User\\My_projects\\Ai_magic_assistant\\web_scraping\\tests\\fixtures\\page_1452.html",
+      "metadata_file": "C:\\Users\\User\\My_projects\\Ai_magic_assistant\\web_scraping\\tests\\fixtures\\page_1452_metadata.json",
+      "content_length": 82003,
+      "page_info": {
+        "url": "https://www.penguinmagic.com/p/1452",
+        "id": "1452",
+        "name": "Unknown"
+      }
+    }
+  ]
+}
